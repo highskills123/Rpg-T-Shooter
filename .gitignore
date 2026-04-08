@@ -1,0 +1,13 @@
+.DS_Store
+.env
+.env.*
+node_modules/
+dist/
+build/
+.expo/
+.expo-shared/
+coverage/
+*.log
+.venv/
+__pycache__/
+.pytest_cache/

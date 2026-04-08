@@ -1,0 +1,13 @@
+{
+  "name": "neon-space-shooter",
+  "private": true,
+  "type": "module",
+  "workspaces": [
+    "apps/mobile"
+  ],
+  "scripts": {
+    "test": "npm run test:frontend && npm run test:backend",
+    "test:frontend": "node --test tests/gameEngine.test.js",
+    "test:backend": "./.venv/bin/python -m unittest discover -s apps/server/tests -p 'test_*.py' -t apps/server"
+  }
+}

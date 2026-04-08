@@ -1,0 +1,22 @@
+{
+  "expo": {
+    "name": "RPG T Shooter",
+    "slug": "neon-space-shooter",
+    "version": "1.0.0",
+    "scheme": "neon-space-shooter",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "plugins": [
+      "expo-router"
+    ],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "android": {
+      "package": "com.highskills.neonspaceshooter"
+    },
+    "ios": {
+      "bundleIdentifier": "com.highskills.neonspaceshooter"
+    }
+  }
+}
