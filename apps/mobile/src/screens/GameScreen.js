@@ -328,6 +328,7 @@ export default function GameScreen() {
                     key={bullet.id}
                     style={[
                       styles.enemyProjectileSprite,
+                      bullet.visualKey === "bossSlash" && styles.enemyProjectileBossSprite,
                       {
                         left: bullet.x - bullet.visualSize / 2,
                         top: bullet.y - bullet.visualSize / 2,
@@ -762,6 +763,12 @@ const styles = StyleSheet.create({
     position: "absolute",
     alignItems: "center",
     justifyContent: "center"
+  },
+  enemyProjectileBossSprite: {
+    shadowColor: COLORS.gold,
+    shadowOpacity: 0.7,
+    shadowRadius: 18,
+    shadowOffset: { width: 0, height: 0 }
   },
   pickup: {
     position: "absolute",

@@ -11,7 +11,7 @@ const PLAYER_BOUNDS_PADDING = 26;
 const PLAYER_START_Y = GAME_HEIGHT - 94;
 const PLAYER_BODY_RADIUS = 22;
 const PLAYER_HIT_RADIUS = 14;
-const MAX_ENEMIES = 18;
+const MAX_ENEMIES = 28;
 const ENEMY_MELEE_GAP = 10;
 const ENEMY_MELEE_COOLDOWN_MS = 920;
 const ENEMY_DEATH_ANIMATION_MS = 520;
@@ -82,6 +82,21 @@ function getKillGoalForLevel(level) {
     return BOSS_DEFEATS_TO_ADVANCE;
   }
   return LEVEL_KILL_TARGETS[tierLevel - 1] + getDifficultyLoop(level) * 4;
+}
+
+function getEnemyCap(level) {
+  return Math.min(MAX_ENEMIES, 16 + getTierLevel(level) * 3 + getDifficultyLoop(level) * 2);
+}
+
+function getSpawnBurstCount(level) {
+  const tier = getTierLevel(level);
+  if (tier >= 4) {
+    return 3;
+  }
+  if (tier >= 2) {
+    return 2;
+  }
+  return 1;
 }
 
 function createBaseState(now = 0, characterKey = DEFAULT_PLAYER_CHARACTER) {
@@ -274,7 +289,7 @@ function createEnemyProjectile(id, enemy, angle = 0) {
 }
 
 function getSpawnInterval(level) {
-  return Math.max(280, 1280 - getTierLevel(level) * 95 - getDifficultyLoop(level) * 140);
+  return Math.max(180, 920 - getTierLevel(level) * 90 - getDifficultyLoop(level) * 120);
 }
 
 function applyWeaponFire(state, now, nextId, events) {
@@ -319,7 +334,8 @@ function maybeSpawnEnemy(state, now, random, nextId, enemies, events) {
     };
   }
 
-  if (bossAlreadyActive || enemies.length >= MAX_ENEMIES) {
+  const enemyCap = getEnemyCap(state.level);
+  if (bossAlreadyActive || enemies.length >= enemyCap) {
     return {
       nextId,
       activeBossLevel: state.activeBossLevel
@@ -327,11 +343,18 @@ function maybeSpawnEnemy(state, now, random, nextId, enemies, events) {
   }
 
   const pool = getEnemyPoolForLevel(state.level);
-  const typeKey = pool[Math.floor(random() * pool.length)];
-  const spawnX = 40 + random() * (GAME_WIDTH - 80);
-  enemies.push(createEnemy(typeKey, spawnX, -24, now, nextId, state.level));
+  const burstCount = Math.min(getSpawnBurstCount(state.level), enemyCap - enemies.length);
+  for (let index = 0; index < burstCount; index += 1) {
+    const typeKey = pool[Math.floor(random() * pool.length)];
+    const spawnX = 40 + random() * (GAME_WIDTH - 80);
+    enemies.push(createEnemy(typeKey, spawnX, -24 - index * 22, now, nextId, state.level));
+    nextId += 1;
+    if (enemies.length >= enemyCap) {
+      break;
+    }
+  }
   return {
-    nextId: nextId + 1,
+    nextId,
     activeBossLevel: state.activeBossLevel
   };
 }

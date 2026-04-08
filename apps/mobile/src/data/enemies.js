@@ -92,13 +92,13 @@ export const ENEMY_TYPES = {
 export function getEnemyPoolForLevel(level) {
   const tier = ((level - 1) % 5) + 1;
   if (tier === 4) {
-    return ["skeletonArcher", "armoredSkeleton", "orc", "priest", "armoredOrc"];
+    return ["skeleton", "skeletonArcher", "orc", "armoredSkeleton", "priest", "armoredOrc"];
   }
   if (tier === 3) {
-    return ["skeleton", "skeletonArcher", "orc", "armoredSkeleton"];
+    return ["slime", "skeleton", "skeletonArcher", "orc", "armoredSkeleton", "priest"];
   }
   if (tier === 2) {
-    return ["slime", "skeleton", "skeletonArcher"];
+    return ["slime", "skeleton", "skeletonArcher", "orc"];
   }
-  return ["slime"];
+  return ["slime", "skeleton"];
 }

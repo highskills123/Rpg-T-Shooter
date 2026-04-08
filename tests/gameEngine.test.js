@@ -89,11 +89,11 @@ test("selected player character survives initial state and game start", () => {
 });
 
 test("enemy pool escalates through slime and skeleton tiers", () => {
-  assert.deepEqual(getEnemyPoolForLevel(1), ["slime"]);
-  assert.deepEqual(getEnemyPoolForLevel(2), ["slime", "skeleton", "skeletonArcher"]);
-  assert.deepEqual(getEnemyPoolForLevel(3), ["skeleton", "skeletonArcher", "orc", "armoredSkeleton"]);
-  assert.deepEqual(getEnemyPoolForLevel(4), ["skeletonArcher", "armoredSkeleton", "orc", "priest", "armoredOrc"]);
-  assert.deepEqual(getEnemyPoolForLevel(8), ["skeleton", "skeletonArcher", "orc", "armoredSkeleton"]);
+  assert.deepEqual(getEnemyPoolForLevel(1), ["slime", "skeleton"]);
+  assert.deepEqual(getEnemyPoolForLevel(2), ["slime", "skeleton", "skeletonArcher", "orc"]);
+  assert.deepEqual(getEnemyPoolForLevel(3), ["slime", "skeleton", "skeletonArcher", "orc", "armoredSkeleton", "priest"]);
+  assert.deepEqual(getEnemyPoolForLevel(4), ["skeleton", "skeletonArcher", "orc", "armoredSkeleton", "priest", "armoredOrc"]);
+  assert.deepEqual(getEnemyPoolForLevel(8), ["slime", "skeleton", "skeletonArcher", "orc", "armoredSkeleton", "priest"]);
 });
 
 test("player stays on a fixed vertical lane while moving", () => {
@@ -280,6 +280,23 @@ test("level 5 requires three boss defeats before advancing", () => {
 
   assert.equal(updated.level, 6);
   assert.equal(updated.bossDefeatsOnLevel, 0);
+});
+
+test("early levels spawn multiple enemies instead of single trickles", () => {
+  const state = {
+    ...startGame({}, 0),
+    level: 2,
+    spawnBudgetMs: 2000,
+    lastFireAt: 999999
+  };
+
+  const updated = updateGame(state, {
+    now: 33,
+    deltaMs: 33,
+    random: () => 0.2
+  });
+
+  assert.ok(updated.enemies.length >= 2);
 });
 
 test("game over score submission uses 3-char callsign", () => {

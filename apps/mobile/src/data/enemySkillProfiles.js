@@ -19,10 +19,10 @@ export const ENEMY_SKILL_PROFILES = {
   },
   boss: {
     visualKey: "bossSlash",
-    size: 86,
+    size: 132,
     frameCount: 8,
-    hitRadius: 7,
-    projectileSpeed: 4.8,
+    hitRadius: 9,
+    projectileSpeed: 4.4,
     damage: 2,
     rotateWithAngle: true
   }
