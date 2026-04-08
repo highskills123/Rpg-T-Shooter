@@ -2,6 +2,7 @@ import * as Haptics from "expo-haptics";
 import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { PanResponder, SafeAreaView, Share, StyleSheet, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { NeonButton } from "../components/NeonButton.js";
 import { SpriteStrip } from "../components/SpriteStrip.js";
@@ -94,6 +95,7 @@ function Overlay({ children }) {
 
 export default function GameScreen() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const params = useLocalSearchParams();
   const selectedCharacter = normalizePlayerCharacter(params.character);
   const [gameState, setGameState] = useState(() => createInitialState(Date.now(), selectedCharacter));
@@ -220,6 +222,7 @@ export default function GameScreen() {
   }
 
   const ambientElements = renderAmbient(clock);
+  const weaponBarBottom = Math.max(18, insets.bottom + 18);
   const playerProfile = PLAYER_CHARACTERS[gameState.player.characterKey];
   const playerSprite = PLAYER_SPRITES[gameState.player.characterKey];
   const playerSkillEffect = PLAYER_SKILL_EFFECTS[gameState.player.characterKey];
@@ -435,7 +438,7 @@ export default function GameScreen() {
                   frameCount={playerAnimationStrip.frameCount}
                 />
               </View>
-              <View style={styles.weaponBar}>
+              <View style={[styles.weaponBar, { bottom: weaponBarBottom }]}>
                 {gameState.availableWeapons.map((weaponKey) => (
                   <NeonButton
                     key={weaponKey}
