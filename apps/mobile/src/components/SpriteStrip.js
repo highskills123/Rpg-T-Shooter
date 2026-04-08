@@ -3,10 +3,18 @@ import { Image, StyleSheet, View } from "react-native";
 
 import { STRIP_FRAME_SIZE } from "../data/gameSprites.js";
 
-export function SpriteStrip({ source, frame = 0, frameCount = 6, size = STRIP_FRAME_SIZE, style, imageStyle }) {
+export function SpriteStrip({
+  source,
+  frame = 0,
+  frameCount = 6,
+  size = STRIP_FRAME_SIZE,
+  sourceFrameSize = STRIP_FRAME_SIZE,
+  style,
+  imageStyle
+}) {
   const safeFrame = ((frame % frameCount) + frameCount) % frameCount;
-  const scale = size / STRIP_FRAME_SIZE;
-  const stripWidth = STRIP_FRAME_SIZE * frameCount * scale;
+  const scale = size / sourceFrameSize;
+  const stripWidth = sourceFrameSize * frameCount * scale;
   const offsetX = safeFrame * size;
 
   return (
@@ -14,6 +22,7 @@ export function SpriteStrip({ source, frame = 0, frameCount = 6, size = STRIP_FR
       <Image
         source={source}
         resizeMode="stretch"
+        resizeMethod="resize"
         style={[
           styles.strip,
           {

@@ -1,14 +1,14 @@
 export const WEAPON_ORDER = [
   "plasma",
-  "spread",
   "laser",
+  "spread",
   "rocket",
   "chain"
 ];
 
 export const WEAPON_UNLOCK_MILESTONES = [
-  { kills: 12, weaponKey: "spread" },
-  { kills: 28, weaponKey: "laser" },
+  { kills: 12, weaponKey: "laser" },
+  { kills: 28, weaponKey: "spread" },
   { kills: 50, weaponKey: "rocket" },
   { kills: 80, weaponKey: "chain" }
 ];

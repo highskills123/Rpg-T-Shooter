@@ -6,7 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import { NeonButton } from "../components/NeonButton.js";
 import { SpriteStrip } from "../components/SpriteStrip.js";
-import { ENEMY_SPRITES, PLAYER_SKILL_EFFECTS, PLAYER_SPRITES } from "../data/gameSprites.js";
+import { ENEMY_PROJECTILE_SPRITES, ENEMY_SPRITES, PLAYER_SKILL_EFFECTS, PLAYER_SPRITES } from "../data/gameSprites.js";
 import { PLAYER_CHARACTERS, normalizePlayerCharacter } from "../data/playerCharacters.js";
 import { POWER_UPS } from "../data/powerUps.js";
 import { WEAPONS } from "../data/weapons.js";
@@ -323,18 +323,41 @@ export default function GameScreen() {
                 </View>
               ))}
               {gameState.enemyBullets.map((bullet) => (
-                <View
-                  key={bullet.id}
-                  style={[
-                    styles.enemyProjectile,
-                    {
-                      left: bullet.x - bullet.radius,
-                      top: bullet.y - bullet.radius,
-                      width: bullet.radius * 2,
-                      height: bullet.radius * 2
-                    }
-                  ]}
-                />
+                bullet.visualKey ? (
+                  <View
+                    key={bullet.id}
+                    style={[
+                      styles.enemyProjectileSprite,
+                      {
+                        left: bullet.x - bullet.visualSize / 2,
+                        top: bullet.y - bullet.visualSize / 2,
+                        width: bullet.visualSize,
+                        height: bullet.visualSize,
+                        transform: [{ rotate: bullet.rotationDeg }]
+                      }
+                    ]}
+                  >
+                    <SpriteStrip
+                      source={ENEMY_PROJECTILE_SPRITES[bullet.visualKey].source}
+                      size={bullet.visualSize}
+                      frame={Math.floor((clock + bullet.id * 40) / 80) % bullet.visualFrameCount}
+                      frameCount={bullet.visualFrameCount}
+                    />
+                  </View>
+                ) : (
+                  <View
+                    key={bullet.id}
+                    style={[
+                      styles.enemyProjectile,
+                      {
+                        left: bullet.x - bullet.radius,
+                        top: bullet.y - bullet.radius,
+                        width: bullet.radius * 2,
+                        height: bullet.radius * 2
+                      }
+                    ]}
+                  />
+                )
               ))}
               {gameState.pickups.map((pickup) => (
                 <View
@@ -734,6 +757,11 @@ const styles = StyleSheet.create({
     position: "absolute",
     borderRadius: 999,
     backgroundColor: COLORS.gold
+  },
+  enemyProjectileSprite: {
+    position: "absolute",
+    alignItems: "center",
+    justifyContent: "center"
   },
   pickup: {
     position: "absolute",

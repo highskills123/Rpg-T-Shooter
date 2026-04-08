@@ -1,4 +1,5 @@
 import { ENEMY_TYPES, getEnemyPoolForLevel } from "../data/enemies.js";
+import { ENEMY_SKILL_PROFILES } from "../data/enemySkillProfiles.js";
 import { DEFAULT_PLAYER_CHARACTER, normalizePlayerCharacter } from "../data/playerCharacters.js";
 import { PLAYER_SKILL_PROFILES } from "../data/playerSkillProfiles.js";
 import { POWER_UPS, POWER_UP_DROP_KEYS } from "../data/powerUps.js";
@@ -10,12 +11,13 @@ const PLAYER_BOUNDS_PADDING = 26;
 const PLAYER_START_Y = GAME_HEIGHT - 94;
 const PLAYER_BODY_RADIUS = 22;
 const PLAYER_HIT_RADIUS = 14;
-const LEVEL_KILL_STEP = 8;
 const MAX_ENEMIES = 18;
 const ENEMY_MELEE_GAP = 10;
-const ENEMY_MELEE_COOLDOWN_MS = 700;
+const ENEMY_MELEE_COOLDOWN_MS = 920;
 const ENEMY_DEATH_ANIMATION_MS = 520;
 const ENEMY_AGGRO_RANGE = 160;
+const BOSS_DEFEATS_TO_ADVANCE = 3;
+const LEVEL_KILL_TARGETS = [8, 11, 15, 19];
 
 function clamp(value, min, max) {
   return Math.max(min, Math.min(max, value));
@@ -66,6 +68,22 @@ function createPlayer(characterKey = DEFAULT_PLAYER_CHARACTER) {
   };
 }
 
+function getTierLevel(level) {
+  return ((level - 1) % 5) + 1;
+}
+
+function getDifficultyLoop(level) {
+  return Math.floor((level - 1) / 5);
+}
+
+function getKillGoalForLevel(level) {
+  const tierLevel = getTierLevel(level);
+  if (tierLevel === 5) {
+    return BOSS_DEFEATS_TO_ADVANCE;
+  }
+  return LEVEL_KILL_TARGETS[tierLevel - 1] + getDifficultyLoop(level) * 4;
+}
+
 function createBaseState(now = 0, characterKey = DEFAULT_PLAYER_CHARACTER) {
   return {
     screen: "menu",
@@ -85,6 +103,8 @@ function createBaseState(now = 0, characterKey = DEFAULT_PLAYER_CHARACTER) {
     score: 0,
     kills: 0,
     level: 1,
+    levelProgressKills: 0,
+    bossDefeatsOnLevel: 0,
     lastTickAt: now,
     lastFireAt: now,
     spawnBudgetMs: 0,
@@ -191,6 +211,9 @@ export function deleteNameCharacter(state) {
 
 export function createEnemy(typeKey, x, y, now, id) {
   const definition = ENEMY_TYPES[typeKey];
+  const level = arguments[5] ?? 1;
+  const loop = getDifficultyLoop(level);
+  const isBoss = definition.key === "boss";
   return {
     id,
     type: definition.key,
@@ -198,12 +221,12 @@ export function createEnemy(typeKey, x, y, now, id) {
     y,
     size: definition.size,
     hitRadius: definition.hitRadius ?? definition.size,
-    hp: definition.hp,
-    maxHp: definition.hp,
-    speed: definition.speed,
-    score: definition.score,
-    fireRateMs: definition.fireRateMs,
-    nextShotAt: now + definition.fireRateMs,
+    hp: definition.hp + loop * (isBoss ? 10 : 1),
+    maxHp: definition.hp + loop * (isBoss ? 10 : 1),
+    speed: definition.speed + loop * (isBoss ? 0.08 : 0.18),
+    score: definition.score + loop * Math.round(definition.score * 0.35),
+    fireRateMs: definition.fireRateMs ? Math.max(1050, definition.fireRateMs - loop * 160) : 0,
+    nextShotAt: now + (definition.fireRateMs ? Math.max(1050, definition.fireRateMs - loop * 160) : 0),
     nextMeleeAt: now + ENEMY_MELEE_COOLDOWN_MS,
     lastHitAt: 0,
     lastAttackAt: 0,
@@ -232,24 +255,26 @@ function createPlayerProjectile(id, player, weapon, angle = 0) {
 }
 
 function createEnemyProjectile(id, enemy, angle = 0) {
+  const profile = ENEMY_SKILL_PROFILES[enemy.type];
+  const rotationDeg = profile?.rotateWithAngle ? `${90 + Math.round((angle * 180) / Math.PI)}deg` : "0deg";
   return {
     id,
     owner: "enemy",
     x: enemy.x,
     y: enemy.y + enemy.size,
-    vx: Math.sin(angle) * 4,
-    vy: Math.cos(angle) * 4.6,
-    radius: enemy.type === "boss" ? 7 : 5,
-    damage: enemy.type === "boss" ? 2 : 1
+    vx: Math.sin(angle) * (profile?.projectileSpeed ?? 4),
+    vy: Math.cos(angle) * (profile?.projectileSpeed ?? 4.6),
+    radius: profile?.hitRadius ?? (enemy.type === "boss" ? 7 : 5),
+    damage: profile?.damage ?? (enemy.type === "boss" ? 2 : 1),
+    visualKey: profile?.visualKey ?? null,
+    visualSize: profile?.size ?? 0,
+    visualFrameCount: profile?.frameCount ?? 1,
+    rotationDeg
   };
 }
 
 function getSpawnInterval(level) {
-  return Math.max(340, 1300 - level * 85);
-}
-
-function getLevelFromKills(kills) {
-  return Math.max(1, 1 + Math.floor(kills / LEVEL_KILL_STEP));
+  return Math.max(280, 1280 - getTierLevel(level) * 95 - getDifficultyLoop(level) * 140);
 }
 
 function applyWeaponFire(state, now, nextId, events) {
@@ -286,7 +311,7 @@ function applyWeaponFire(state, now, nextId, events) {
 function maybeSpawnEnemy(state, now, random, nextId, enemies, events) {
   const bossAlreadyActive = enemies.some((enemy) => enemy.type === "boss");
   if (state.level % 5 === 0 && !bossAlreadyActive && state.activeBossLevel !== state.level) {
-    enemies.push(createEnemy("boss", GAME_WIDTH / 2, 92, now, nextId));
+    enemies.push(createEnemy("boss", GAME_WIDTH / 2, 92, now, nextId, state.level));
     pushEvent(events, "boss_spawn");
     return {
       nextId: nextId + 1,
@@ -304,7 +329,7 @@ function maybeSpawnEnemy(state, now, random, nextId, enemies, events) {
   const pool = getEnemyPoolForLevel(state.level);
   const typeKey = pool[Math.floor(random() * pool.length)];
   const spawnX = 40 + random() * (GAME_WIDTH - 80);
-  enemies.push(createEnemy(typeKey, spawnX, -24, now, nextId));
+  enemies.push(createEnemy(typeKey, spawnX, -24, now, nextId, state.level));
   return {
     nextId: nextId + 1,
     activeBossLevel: state.activeBossLevel
@@ -395,7 +420,7 @@ function handleEnemyShooting(enemies, now, nextId, enemyBullets) {
       continue;
     }
     if (enemy.type === "boss") {
-      for (const angle of [-0.32, 0, 0.32]) {
+      for (const angle of [-0.28, 0, 0.28]) {
         enemyBullets.push(createEnemyProjectile(nextId, enemy, angle));
         nextId += 1;
       }
@@ -491,6 +516,8 @@ function handleCombat(state, now, random, nextId, player, bullets, enemyBullets,
   let activeBossLevel = state.activeBossLevel;
   const defeatedEnemies = [...state.defeatedEnemies];
   let lastPlayerHitAt = state.lastPlayerHitAt;
+  let levelProgressKills = state.levelProgressKills;
+  let bossDefeatsOnLevel = state.bossDefeatsOnLevel;
 
   const survivingBullets = [];
   let mutableEnemies = enemies.map((enemy) => ({ ...enemy }));
@@ -555,8 +582,10 @@ function handleCombat(state, now, random, nextId, player, bullets, enemyBullets,
     kills += 1;
     if (enemy.type === "boss") {
       activeBossLevel = null;
+      bossDefeatsOnLevel += 1;
       pushEvent(events, "boss_down");
     } else {
+      levelProgressKills += 1;
       pushEvent(events, "enemy_down");
     }
     nextId = dropPickupForKill(enemy, kills, random, nextId, pickups, availableWeapons, events);
@@ -652,6 +681,8 @@ function handleCombat(state, now, random, nextId, player, bullets, enemyBullets,
     kills,
     availableWeapons,
     activeBossLevel,
+    levelProgressKills,
+    bossDefeatsOnLevel,
     bullets: survivingBullets,
     enemyBullets: survivingEnemyBullets,
     enemies: enemiesAfterMelee,
@@ -739,11 +770,29 @@ export function updateGame(state, options = {}) {
     events
   );
 
-  const level = getLevelFromKills(combat.kills);
+  let level = state.level;
+  let levelProgressKills = combat.levelProgressKills;
+  let bossDefeatsOnLevel = combat.bossDefeatsOnLevel;
   let message = combat.message;
   let messageUntil = combat.messageUntil;
   const defeatedEnemies = combat.defeatedEnemies.filter((enemy) => now - enemy.defeatedAt < ENEMY_DEATH_ANIMATION_MS);
-  if (level > state.level) {
+  const isBossLevel = getTierLevel(state.level) === 5;
+  if (isBossLevel) {
+    if (bossDefeatsOnLevel >= BOSS_DEFEATS_TO_ADVANCE) {
+      level += 1;
+      levelProgressKills = 0;
+      bossDefeatsOnLevel = 0;
+      message = `LEVEL ${level}`;
+      messageUntil = now + 1600;
+      pushEvent(events, "level_up");
+    } else if (combat.bossDefeatsOnLevel > state.bossDefeatsOnLevel) {
+      message = `BOSS ${bossDefeatsOnLevel}/${BOSS_DEFEATS_TO_ADVANCE}`;
+      messageUntil = now + 1600;
+    }
+  } else if (levelProgressKills >= getKillGoalForLevel(state.level)) {
+    level += 1;
+    levelProgressKills = 0;
+    bossDefeatsOnLevel = 0;
     message = `LEVEL ${level}`;
     messageUntil = now + 1600;
     pushEvent(events, "level_up");
@@ -764,6 +813,8 @@ export function updateGame(state, options = {}) {
       score: combat.score,
       kills: combat.kills,
       level,
+      levelProgressKills,
+      bossDefeatsOnLevel,
       lastTickAt: now,
       lastFireAt: fireResult.lastFireAt,
       spawnBudgetMs,
@@ -791,6 +842,8 @@ export function updateGame(state, options = {}) {
     score: combat.score,
     kills: combat.kills,
     level,
+    levelProgressKills,
+    bossDefeatsOnLevel,
     lastTickAt: now,
     lastFireAt: fireResult.lastFireAt,
     spawnBudgetMs,

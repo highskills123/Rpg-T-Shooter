@@ -1,4 +1,4 @@
-export const STRIP_FRAME_SIZE = 100;
+export const STRIP_FRAME_SIZE = 200;
 
 function anim(source, frameCount) {
   return { source, frameCount };
@@ -81,6 +81,36 @@ export const ENEMY_SPRITES = {
       death: anim(require("../../assets/images/animations/enemies/armored-skeleton-death.png"), 4)
     }
   },
+  orc: {
+    size: 228,
+    animations: {
+      idle: anim(require("../../assets/images/enemies/orc-idle.png"), 6),
+      walk: anim(require("../../assets/images/animations/enemies/orc-walk.png"), 8),
+      attack: anim(require("../../assets/images/animations/enemies/orc-attack.png"), 6),
+      hurt: anim(require("../../assets/images/animations/enemies/orc-hurt.png"), 4),
+      death: anim(require("../../assets/images/animations/enemies/orc-death.png"), 4)
+    }
+  },
+  priest: {
+    size: 224,
+    animations: {
+      idle: anim(require("../../assets/images/enemies/priest-idle.png"), 6),
+      walk: anim(require("../../assets/images/animations/enemies/priest-walk.png"), 8),
+      attack: anim(require("../../assets/images/animations/enemies/priest-attack.png"), 9),
+      hurt: anim(require("../../assets/images/animations/enemies/priest-hurt.png"), 4),
+      death: anim(require("../../assets/images/animations/enemies/priest-death.png"), 4)
+    }
+  },
+  armoredOrc: {
+    size: 246,
+    animations: {
+      idle: anim(require("../../assets/images/enemies/armored-orc-idle.png"), 6),
+      walk: anim(require("../../assets/images/animations/enemies/armored-orc-walk.png"), 8),
+      attack: anim(require("../../assets/images/animations/enemies/armored-orc-attack.png"), 7),
+      hurt: anim(require("../../assets/images/animations/enemies/armored-orc-hurt.png"), 4),
+      death: anim(require("../../assets/images/animations/enemies/armored-orc-death.png"), 4)
+    }
+  },
   boss: {
     size: 360,
     animations: {
@@ -90,6 +120,21 @@ export const ENEMY_SPRITES = {
       hurt: anim(require("../../assets/images/animations/enemies/greatsword-skeleton-hurt.png"), 4),
       death: anim(require("../../assets/images/animations/enemies/greatsword-skeleton-death.png"), 4)
     }
+  }
+};
+
+export const ENEMY_PROJECTILE_SPRITES = {
+  arrow: {
+    source: require("../../assets/images/projectiles/enemy-arrow.png"),
+    frameCount: 1
+  },
+  priestMagic: {
+    source: require("../../assets/images/projectiles/priest-skill.png"),
+    frameCount: 5
+  },
+  bossSlash: {
+    source: require("../../assets/images/projectiles/boss-slash.png"),
+    frameCount: 8
   }
 };
 

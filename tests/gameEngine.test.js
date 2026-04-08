@@ -19,9 +19,9 @@ test("normalizes arcade names to 3 alphanumeric chars", () => {
 });
 
 test("milestones unlock the next missing weapon", () => {
-  assert.deepEqual(getNextWeaponUnlock(12, ["plasma"]), { kills: 12, weaponKey: "spread" });
-  assert.equal(getNextWeaponUnlock(12, ["plasma", "spread"]), undefined);
-  assert.deepEqual(getNextWeaponUnlock(80, ["plasma", "spread", "laser", "rocket"]), {
+  assert.deepEqual(getNextWeaponUnlock(12, ["plasma"]), { kills: 12, weaponKey: "laser" });
+  assert.equal(getNextWeaponUnlock(12, ["plasma", "laser"]), undefined);
+  assert.deepEqual(getNextWeaponUnlock(80, ["plasma", "laser", "spread", "rocket"]), {
     kills: 80,
     weaponKey: "chain"
   });
@@ -91,7 +91,9 @@ test("selected player character survives initial state and game start", () => {
 test("enemy pool escalates through slime and skeleton tiers", () => {
   assert.deepEqual(getEnemyPoolForLevel(1), ["slime"]);
   assert.deepEqual(getEnemyPoolForLevel(2), ["slime", "skeleton", "skeletonArcher"]);
-  assert.deepEqual(getEnemyPoolForLevel(3), ["slime", "skeleton", "skeletonArcher", "armoredSkeleton"]);
+  assert.deepEqual(getEnemyPoolForLevel(3), ["skeleton", "skeletonArcher", "orc", "armoredSkeleton"]);
+  assert.deepEqual(getEnemyPoolForLevel(4), ["skeletonArcher", "armoredSkeleton", "orc", "priest", "armoredOrc"]);
+  assert.deepEqual(getEnemyPoolForLevel(8), ["skeleton", "skeletonArcher", "orc", "armoredSkeleton"]);
 });
 
 test("player stays on a fixed vertical lane while moving", () => {
@@ -223,7 +225,61 @@ test("enemy kill at a milestone drops a weapon portal", () => {
 
   assert.equal(updated.kills, 12);
   assert.equal(updated.pickups.length, 1);
-  assert.equal(updated.pickups[0].weaponKey, "spread");
+  assert.equal(updated.pickups[0].weaponKey, "laser");
+});
+
+test("skeleton archer fires an arrow skill instead of a round dot", () => {
+  const enemy = createEnemy("skeletonArcher", 200, 220, 0, 1);
+  const state = {
+    ...startGame({}, 0),
+    enemies: [{ ...enemy, nextShotAt: 0 }],
+    lastFireAt: 999999
+  };
+
+  const updated = updateGame(state, {
+    now: 1000,
+    deltaMs: 33,
+    random: () => 0.99
+  });
+
+  assert.equal(updated.enemyBullets.length, 1);
+  assert.equal(updated.enemyBullets[0].visualKey, "arrow");
+});
+
+test("level 5 requires three boss defeats before advancing", () => {
+  const state = {
+    ...startGame({}, 0),
+    level: 5,
+    bossDefeatsOnLevel: 2,
+    enemies: [{ ...createEnemy("boss", 200, 180, 0, 1, 5), hp: 1, maxHp: 1 }],
+    bullets: [
+      {
+        id: 9,
+        owner: "player",
+        x: 200,
+        y: 180,
+        vx: 0,
+        vy: 0,
+        radius: 2,
+        damage: 1,
+        weaponKey: "plasma",
+        pierce: 1,
+        splashRadius: 0,
+        chainRadius: 0,
+        chainTargets: 0
+      }
+    ],
+    lastFireAt: 999999
+  };
+
+  const updated = updateGame(state, {
+    now: 1200,
+    deltaMs: 33,
+    random: () => 0.99
+  });
+
+  assert.equal(updated.level, 6);
+  assert.equal(updated.bossDefeatsOnLevel, 0);
 });
 
 test("game over score submission uses 3-char callsign", () => {
