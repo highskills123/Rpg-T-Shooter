@@ -15,4 +15,10 @@ cd "$ANDROID_DIR"
 echo ">> Installing on device..."
 adb install -r "$APK"
 
-echo ">> Done! App updated on device."
+echo ">> Pushing to GitHub..."
+cd /home/highskills/autoclicker/neon-space-shooter
+git add .
+git commit -m "deploy: $(date '+%Y-%m-%d %H:%M')" || echo "Nothing to commit"
+git push
+
+echo ">> Done! App updated on device and pushed to GitHub."

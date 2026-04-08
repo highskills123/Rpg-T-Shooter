@@ -25,36 +25,39 @@ import {
 import { submitHighScore } from "../lib/leaderboardApi.js";
 import { COLORS, MONO_FONT } from "../lib/theme.js";
 
-const STAR_LAYERS = createStarLayers();
+const AMBIENT_LAYERS = createAmbientLayers();
 const NAME_KEYS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O"];
 const NAME_KEYS_2 = ["P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "0", "1", "2", "3"];
 const NAME_KEYS_3 = ["4", "5", "6", "7", "8", "9"];
 
-function createStarLayers() {
+function createAmbientLayers() {
   return [
-    Array.from({ length: 20 }, (_, index) => ({
-      id: `back-${index}`,
-      x: 12 + ((index * 37) % 360),
-      y: (index * 63) % 760,
-      size: index % 3 === 0 ? 2 : 1,
-      color: "rgba(143, 169, 122, 0.34)",
-      speed: 0.35
+    Array.from({ length: 7 }, (_, index) => ({
+      id: `mist-${index}`,
+      x: 20 + ((index * 73) % 320),
+      y: 40 + ((index * 91) % 620),
+      size: 150 + (index % 3) * 70,
+      color: index % 2 === 0 ? "rgba(175, 187, 151, 0.09)" : "rgba(119, 137, 102, 0.08)",
+      driftX: 0.08 + (index % 3) * 0.03,
+      driftY: 0.025 + (index % 2) * 0.02
     })),
-    Array.from({ length: 14 }, (_, index) => ({
-      id: `mid-${index}`,
-      x: 18 + ((index * 71) % 340),
-      y: (index * 49) % 760,
-      size: index % 4 === 0 ? 3 : 2,
-      color: "rgba(138, 92, 114, 0.34)",
-      speed: 0.6
+    Array.from({ length: 12 }, (_, index) => ({
+      id: `spore-${index}`,
+      x: 24 + ((index * 47) % 340),
+      y: (index * 57) % 760,
+      size: 8 + (index % 4) * 5,
+      color: index % 3 === 0 ? "rgba(209, 186, 136, 0.2)" : "rgba(171, 195, 145, 0.16)",
+      driftX: 0.11 + (index % 2) * 0.04,
+      driftY: 0.05 + (index % 3) * 0.02
     })),
-    Array.from({ length: 9 }, (_, index) => ({
-      id: `front-${index}`,
-      x: 24 + ((index * 97) % 320),
-      y: (index * 83) % 760,
-      size: index % 2 === 0 ? 3 : 2,
-      color: "rgba(199, 165, 106, 0.72)",
-      speed: 0.9
+    Array.from({ length: 10 }, (_, index) => ({
+      id: `glow-${index}`,
+      x: 28 + ((index * 61) % 330),
+      y: (index * 81) % 760,
+      size: index % 2 === 0 ? 4 : 3,
+      color: index % 2 === 0 ? "rgba(214, 194, 144, 0.7)" : "rgba(191, 214, 164, 0.52)",
+      driftX: 0.22 + (index % 3) * 0.04,
+      driftY: 0.12 + (index % 2) * 0.05
     }))
   ];
 }
@@ -63,11 +66,12 @@ function formatScore(value) {
   return `${value}`.padStart(6, "0");
 }
 
-function renderStars(now) {
-  return STAR_LAYERS.flatMap((layer) =>
-    layer.map((star) => ({
-      ...star,
-      drawY: ((star.y + now * star.speed * 0.03) % GAME_HEIGHT)
+function renderAmbient(now) {
+  return AMBIENT_LAYERS.flatMap((layer) =>
+    layer.map((element) => ({
+      ...element,
+      drawX: ((element.x + now * element.driftX * 0.01) % (GAME_WIDTH + element.size)) - element.size * 0.3,
+      drawY: ((element.y + now * element.driftY * 0.03) % (GAME_HEIGHT + element.size)) - element.size * 0.2
     }))
   );
 }
@@ -215,7 +219,7 @@ export default function GameScreen() {
     setGameState((current) => startGame(current, Date.now()));
   }
 
-  const stars = renderStars(clock);
+  const ambientElements = renderAmbient(clock);
   const playerProfile = PLAYER_CHARACTERS[gameState.player.characterKey];
   const playerSprite = PLAYER_SPRITES[gameState.player.characterKey];
   const playerSkillEffect = PLAYER_SKILL_EFFECTS[gameState.player.characterKey];
@@ -251,19 +255,24 @@ export default function GameScreen() {
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.screen}>
         <View style={styles.gameSurface} {...panResponder.panHandlers}>
+          <View style={styles.canopyShadow} />
+          <View style={styles.forestGlow} />
+          <View style={styles.groveBloom} />
+          <View style={styles.groundMistA} />
+          <View style={styles.groundMistB} />
           <View style={styles.backgroundGlowA} />
           <View style={styles.backgroundGlowB} />
-          {stars.map((star) => (
+          {ambientElements.map((element) => (
             <View
-              key={star.id}
+              key={element.id}
               style={[
                 styles.star,
                 {
-                  left: star.x,
-                  top: star.drawY,
-                  width: star.size,
-                  height: star.size,
-                  backgroundColor: star.color
+                  left: element.drawX,
+                  top: element.drawY,
+                  width: element.size,
+                  height: element.size,
+                  backgroundColor: element.color
                 }
               ]}
             />
@@ -547,21 +556,67 @@ const styles = StyleSheet.create({
   },
   backgroundGlowA: {
     position: "absolute",
-    width: 260,
-    height: 260,
-    borderRadius: 260,
-    top: -80,
-    left: -60,
-    backgroundColor: "rgba(143, 169, 122, 0.08)"
+    width: 320,
+    height: 220,
+    borderRadius: 220,
+    top: -40,
+    left: -40,
+    backgroundColor: "rgba(166, 178, 140, 0.08)"
   },
   backgroundGlowB: {
     position: "absolute",
+    width: 290,
+    height: 240,
+    borderRadius: 240,
+    right: -50,
+    bottom: 70,
+    backgroundColor: "rgba(127, 102, 116, 0.08)"
+  },
+  canopyShadow: {
+    position: "absolute",
+    top: -120,
+    left: -50,
+    right: -50,
+    height: 230,
+    borderBottomLeftRadius: 180,
+    borderBottomRightRadius: 180,
+    backgroundColor: "rgba(31, 40, 27, 0.22)"
+  },
+  forestGlow: {
+    position: "absolute",
+    width: 420,
+    height: 220,
+    borderRadius: 220,
+    left: -30,
+    top: 110,
+    backgroundColor: "rgba(127, 144, 110, 0.09)"
+  },
+  groveBloom: {
+    position: "absolute",
     width: 260,
-    height: 260,
-    borderRadius: 260,
-    right: -70,
-    bottom: 40,
-    backgroundColor: "rgba(138, 92, 114, 0.08)"
+    height: 180,
+    borderRadius: 180,
+    right: 20,
+    top: 210,
+    backgroundColor: "rgba(142, 114, 126, 0.08)"
+  },
+  groundMistA: {
+    position: "absolute",
+    left: -40,
+    right: -20,
+    bottom: 80,
+    height: 140,
+    borderRadius: 120,
+    backgroundColor: "rgba(189, 197, 173, 0.08)"
+  },
+  groundMistB: {
+    position: "absolute",
+    left: 20,
+    right: 10,
+    bottom: 10,
+    height: 120,
+    borderRadius: 120,
+    backgroundColor: "rgba(120, 135, 106, 0.1)"
   },
   star: {
     position: "absolute",

@@ -30,6 +30,9 @@ export default function AboutScreen() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <View style={styles.pageGlowTop} />
+      <View style={styles.pageGlowBottom} />
+      <View style={styles.pageMist} />
       <ScrollView contentContainerStyle={styles.content}>
         <View style={styles.topBar}>
           <Text style={styles.pageTitle}>ABOUT</Text>
@@ -76,6 +79,33 @@ const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
     backgroundColor: COLORS.background
+  },
+  pageGlowTop: {
+    position: "absolute",
+    top: -70,
+    left: -30,
+    width: 280,
+    height: 220,
+    borderRadius: 220,
+    backgroundColor: "rgba(153, 170, 132, 0.08)"
+  },
+  pageGlowBottom: {
+    position: "absolute",
+    right: -40,
+    bottom: 30,
+    width: 260,
+    height: 220,
+    borderRadius: 220,
+    backgroundColor: "rgba(132, 105, 118, 0.08)"
+  },
+  pageMist: {
+    position: "absolute",
+    left: 10,
+    right: 10,
+    bottom: 120,
+    height: 150,
+    borderRadius: 120,
+    backgroundColor: "rgba(190, 197, 176, 0.05)"
   },
   content: {
     padding: 18,
