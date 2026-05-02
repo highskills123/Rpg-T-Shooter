@@ -8,6 +8,6 @@
   "scripts": {
     "test": "npm run test:frontend && npm run test:backend",
     "test:frontend": "node --test tests/gameEngine.test.js",
-    "test:backend": "./.venv/bin/python -m unittest discover -s apps/server/tests -p 'test_*.py' -t apps/server"
+    "test:backend": "sh -c 'if [ -x ./.venv/bin/python ]; then ./.venv/bin/python -m unittest discover -s apps/server/tests -p \"test_*.py\" -t apps/server; elif command -v python3 >/dev/null 2>&1; then python3 -m unittest discover -s apps/server/tests -p \"test_*.py\" -t apps/server; else echo \"Python not found\"; exit 1; fi'"
   }
 }
