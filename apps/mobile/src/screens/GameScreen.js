@@ -55,6 +55,8 @@ function distance(a, b) {
   const dx = a.x - b.x;
   const dy = a.y - b.y;
   return Math.sqrt(dx * dx + dy * dy);
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
 }
 
 export default function GameScreen() {
@@ -65,6 +67,7 @@ export default function GameScreen() {
   const [draggingItemId, setDraggingItemId] = useState(null);
   const [statusText, setStatusText] = useState("Tap the world to move. Enter a corner portal to change map.");
   const [currentMap, setCurrentMap] = useState("City");
+  const [statusText, setStatusText] = useState("Tap the world to move.");
   const lastTapRef = useRef({});
 
   const camera = useMemo(() => {
@@ -125,6 +128,14 @@ export default function GameScreen() {
     handlePortalContact(nextPos);
   }
 
+  function onMovePress(event) {
+    const { locationX, locationY } = event.nativeEvent;
+    const targetX = clamp(camera.left + locationX, 0, MAP_WIDTH);
+    const targetY = clamp(camera.top + locationY, 0, MAP_HEIGHT);
+    setHeroPos({ x: targetX, y: targetY });
+    setStatusText(`Moved to (${Math.round(targetX)}, ${Math.round(targetY)}).`);
+  }
+
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
@@ -144,6 +155,9 @@ export default function GameScreen() {
                 }
               ]}
             >
+        <View style={styles.worldFrame}>
+          <Pressable style={styles.worldViewport} onPress={onMovePress}>
+            <View style={[styles.map, { width: MAP_WIDTH, height: MAP_HEIGHT, left: -camera.left, top: -camera.top }]}>
               {Array.from({ length: 300 }).map((_, index) => (
                 <View
                   key={`tile-${index}`}
@@ -163,12 +177,37 @@ export default function GameScreen() {
                   <Text style={[styles.portalText, { color: mapTheme.accent }]}>◈</Text>
                 </View>
               ))}
+                      top: Math.floor(index / 20) * 120
+                    }
+                  ]}
+                />
+              ))}
               <View style={[styles.hero, { left: heroPos.x - HERO_SIZE / 2, top: heroPos.y - HERO_SIZE / 2 }]}>
                 <Text style={styles.heroText}>⚔</Text>
               </View>
             </View>
           </Pressable>
         </View>
+
+        <View style={styles.tabBar}>
+          {["Inventory", "Skills", "Stats", "Map", "Options"].map((tab) => (
+            <Pressable key={tab} style={[styles.tabBtn, activeTab === tab && styles.tabBtnActive]} onPress={() => setActiveTab(tab)}>
+              <Text style={styles.tabText}>{tab}</Text>
+            </Pressable>
+          ))}
+        </View>
+
+        <View style={styles.inventoryPanel}>
+          <View style={styles.columnLeft}>
+            <Text style={styles.panelTitle}>Equipment</Text>
+            {EQUIP_SLOTS.map((slot) => (
+              <Pressable key={slot} style={styles.equipSlot} onPress={() => handleDrop(slot)}>
+                <Text style={styles.slotLabel}>{slot}</Text>
+                <Text style={styles.slotValue}>{equipment[slot]?.name || "(empty)"}</Text>
+              </Pressable>
+            ))}
+          </View>
+
 
         <View style={styles.tabBar}>
           {["Inventory", "Skills", "Stats", "Map", "Options"].map((tab) => (
@@ -215,6 +254,7 @@ export default function GameScreen() {
                     <Text style={styles.itemMeta}>
                       {item.slot} • {item.rarity}
                     </Text>
+                    <Text style={styles.itemMeta}>{item.slot} • {item.rarity}</Text>
                   </Pressable>
                 ))}
               </ScrollView>
@@ -252,6 +292,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#d2b48c"
   },
+  title: { color: "#d2b48c", fontSize: 28, textAlign: "center", marginBottom: 8, fontWeight: "700" },
+  worldFrame: { borderWidth: 2, borderColor: "#3d2a2a", borderRadius: 10, overflow: "hidden", alignSelf: "center" },
+  worldViewport: { width: VIEW_WIDTH, height: VIEW_HEIGHT, backgroundColor: "#1c1212" },
+  map: { position: "absolute", backgroundColor: "#1a1010" },
+  mapTile: { position: "absolute", width: 110, height: 110, borderWidth: 1, borderColor: "#2f1f1f", backgroundColor: "#221515" },
+  hero: { position: "absolute", width: HERO_SIZE, height: HERO_SIZE, borderRadius: 8, backgroundColor: "#4f1e1e", justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: "#d2b48c" },
   heroText: { color: "#f6e7c6", fontSize: 22 },
   tabBar: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10, justifyContent: "center" },
   tabBtn: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: "#3b2c2c", backgroundColor: "#170f0f" },
@@ -268,6 +314,7 @@ const styles = StyleSheet.create({
     borderColor: "#382727",
     alignItems: "center"
   },
+  columnMiddle: { flex: 1, backgroundColor: "#120b0b", borderRadius: 10, padding: 8, borderWidth: 1, borderColor: "#382727", alignItems: "center" },
   columnRight: { flex: 1.2, backgroundColor: "#150e0e", borderRadius: 10, padding: 8, borderWidth: 1, borderColor: "#382727" },
   panelTitle: { color: "#cab28b", fontWeight: "700", marginBottom: 8, textAlign: "center" },
   equipSlot: { borderWidth: 1, borderColor: "#493535", borderRadius: 8, padding: 6, marginBottom: 6, backgroundColor: "#211414" },
@@ -284,6 +331,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     marginBottom: 10
   },
+  heroPortrait: { width: 100, height: 130, borderWidth: 1, borderColor: "#92734a", borderRadius: 12, backgroundColor: "#241717", justifyContent: "center", alignItems: "center", marginBottom: 10 },
   heroPortraitText: { fontSize: 40, color: "#e9d9bc" },
   statusText: { color: "#cbb89b", fontSize: 12, textAlign: "center" },
   inventoryList: { flex: 1 },
