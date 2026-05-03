@@ -1,871 +1,309 @@
-import * as Haptics from "expo-haptics";
-import { useLocalSearchParams, useRouter } from "expo-router";
-import React, { useEffect, useMemo, useRef, useState } from "react";
-import { PanResponder, SafeAreaView, Share, StyleSheet, Text, View } from "react-native";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import React, { useMemo, useRef, useState } from "react";
+import { Pressable, SafeAreaView, ScrollView, StyleSheet, Text, View } from "react-native";
 
-import { NeonButton } from "../components/NeonButton.js";
-import { SpriteStrip } from "../components/SpriteStrip.js";
-import { ENEMY_PROJECTILE_SPRITES, ENEMY_SPRITES, PLAYER_SKILL_EFFECTS, PLAYER_SPRITES } from "../data/gameSprites.js";
-import { PLAYER_CHARACTERS, normalizePlayerCharacter } from "../data/playerCharacters.js";
-import { POWER_UPS } from "../data/powerUps.js";
-import { WEAPONS } from "../data/weapons.js";
-import {
-  GAME_HEIGHT,
-  GAME_WIDTH,
-  appendNameCharacter,
-  buildScoreSubmission,
-  createInitialState,
-  cycleWeapon,
-  deleteNameCharacter,
-  pauseGame,
-  resumeGame,
-  startGame,
-  updateGame
-} from "../lib/gameEngine.js";
-import { submitHighScore } from "../lib/leaderboardApi.js";
-import { COLORS, MONO_FONT } from "../lib/theme.js";
+const MAP_WIDTH = 2400;
+const MAP_HEIGHT = 2400;
+const VIEW_WIDTH = 340;
+const VIEW_HEIGHT = 440;
+const HERO_SIZE = 48;
 
-const AMBIENT_LAYERS = createAmbientLayers();
-const NAME_KEYS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O"];
-const NAME_KEYS_2 = ["P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z", "0", "1", "2", "3"];
-const NAME_KEYS_3 = ["4", "5", "6", "7", "8", "9"];
+const EQUIP_SLOTS = ["Head", "Chest", "Hands", "Legs", "Weapon", "Ring"];
+const MAP_SEQUENCE = ["City", "Plains", "Forest"];
 
-function createAmbientLayers() {
-  return [
-    Array.from({ length: 7 }, (_, index) => ({
-      id: `mist-${index}`,
-      x: 20 + ((index * 73) % 320),
-      y: 40 + ((index * 91) % 620),
-      size: 150 + (index % 3) * 70,
-      color: index % 2 === 0 ? "rgba(175, 187, 151, 0.09)" : "rgba(119, 137, 102, 0.08)",
-      driftX: 0.08 + (index % 3) * 0.03,
-      driftY: 0.025 + (index % 2) * 0.02
-    })),
-    Array.from({ length: 12 }, (_, index) => ({
-      id: `spore-${index}`,
-      x: 24 + ((index * 47) % 340),
-      y: (index * 57) % 760,
-      size: 8 + (index % 4) * 5,
-      color: index % 3 === 0 ? "rgba(209, 186, 136, 0.2)" : "rgba(171, 195, 145, 0.16)",
-      driftX: 0.11 + (index % 2) * 0.04,
-      driftY: 0.05 + (index % 3) * 0.02
-    })),
-    Array.from({ length: 10 }, (_, index) => ({
-      id: `glow-${index}`,
-      x: 28 + ((index * 61) % 330),
-      y: (index * 81) % 760,
-      size: index % 2 === 0 ? 4 : 3,
-      color: index % 2 === 0 ? "rgba(214, 194, 144, 0.7)" : "rgba(191, 214, 164, 0.52)",
-      driftX: 0.22 + (index % 3) * 0.04,
-      driftY: 0.12 + (index % 2) * 0.05
-    }))
-  ];
+const MAP_THEMES = {
+  City: {
+    bg: "#241b1b",
+    tile: "#3a2f2f",
+    tileBorder: "#5a4848",
+    accent: "#d3b27d"
+  },
+  Plains: {
+    bg: "#1a2316",
+    tile: "#27351f",
+    tileBorder: "#3b522d",
+    accent: "#c4c78a"
+  },
+  Forest: {
+    bg: "#111f18",
+    tile: "#1d3227",
+    tileBorder: "#31523f",
+    accent: "#9bc08d"
+  }
+};
+
+const START_ITEMS = [
+  { id: "i1", name: "Iron Helm", slot: "Head", rarity: "Common" },
+  { id: "i2", name: "Ashen Cuirass", slot: "Chest", rarity: "Rare" },
+  { id: "i3", name: "Raven Blade", slot: "Weapon", rarity: "Epic" },
+  { id: "i4", name: "Bone Ring", slot: "Ring", rarity: "Rare" },
+  { id: "i5", name: "Grave Gloves", slot: "Hands", rarity: "Common" },
+  { id: "i6", name: "Night Greaves", slot: "Legs", rarity: "Common" }
+];
+
+const CORNER_PORTALS = [
+  { id: "portal-nw", label: "NW Portal", x: 60, y: 60 },
+  { id: "portal-ne", label: "NE Portal", x: MAP_WIDTH - 60, y: 60 },
+  { id: "portal-sw", label: "SW Portal", x: 60, y: MAP_HEIGHT - 60 },
+  { id: "portal-se", label: "SE Portal", x: MAP_WIDTH - 60, y: MAP_HEIGHT - 60 }
+];
+
+function clamp(v, min, max) {
+  return Math.max(min, Math.min(max, v));
 }
 
-function formatScore(value) {
-  return `${value}`.padStart(6, "0");
-}
-
-function renderAmbient(now) {
-  return AMBIENT_LAYERS.flatMap((layer) =>
-    layer.map((element) => ({
-      ...element,
-      drawX: ((element.x + now * element.driftX * 0.01) % (GAME_WIDTH + element.size)) - element.size * 0.3,
-      drawY: ((element.y + now * element.driftY * 0.03) % (GAME_HEIGHT + element.size)) - element.size * 0.2
-    }))
-  );
-}
-
-function getLoopingFrame(now, speedMs, frameCount, offset = 0) {
-  return Math.floor((now + offset) / speedMs) % frameCount;
-}
-
-function getProgressFrame(elapsedMs, durationMs, frameCount) {
-  return Math.min(frameCount - 1, Math.floor((Math.max(0, elapsedMs) / durationMs) * frameCount));
-}
-
-function Overlay({ children }) {
-  return (
-    <View style={styles.overlay}>
-      <View style={styles.overlayCard}>{children}</View>
-    </View>
-  );
+function distance(a, b) {
+  const dx = a.x - b.x;
+  const dy = a.y - b.y;
+  return Math.sqrt(dx * dx + dy * dy);
 }
 
 export default function GameScreen() {
-  const router = useRouter();
-  const insets = useSafeAreaInsets();
-  const params = useLocalSearchParams();
-  const selectedCharacter = normalizePlayerCharacter(params.character);
-  const [gameState, setGameState] = useState(() => createInitialState(Date.now(), selectedCharacter));
-  const [clock, setClock] = useState(Date.now());
-  const touchTargetRef = useRef(null);
-  const frameTimeRef = useRef(Date.now());
-  const [savedScore, setSavedScore] = useState(false);
-  const [isSubmittingScore, setIsSubmittingScore] = useState(false);
+  const [heroPos, setHeroPos] = useState({ x: MAP_WIDTH / 2, y: MAP_HEIGHT / 2 });
+  const [activeTab, setActiveTab] = useState("Inventory");
+  const [inventory, setInventory] = useState(START_ITEMS);
+  const [equipment, setEquipment] = useState({});
+  const [draggingItemId, setDraggingItemId] = useState(null);
+  const [statusText, setStatusText] = useState("Tap the world to move. Enter a corner portal to change map.");
+  const [currentMap, setCurrentMap] = useState("City");
+  const lastTapRef = useRef({});
 
-  useEffect(() => {
-    setGameState((current) => {
-      if (current.player.characterKey === selectedCharacter) {
-        return current;
+  const camera = useMemo(() => {
+    const left = clamp(heroPos.x - VIEW_WIDTH / 2, 0, MAP_WIDTH - VIEW_WIDTH);
+    const top = clamp(heroPos.y - VIEW_HEIGHT / 2, 0, MAP_HEIGHT - VIEW_HEIGHT);
+    return { left, top };
+  }, [heroPos]);
+
+  const mapTheme = MAP_THEMES[currentMap];
+
+  function equipItem(item) {
+    const previouslyEquipped = equipment[item.slot];
+
+    setEquipment((current) => ({ ...current, [item.slot]: item }));
+    setInventory((current) => {
+      const withoutEquippedItem = current.filter((inventoryItem) => inventoryItem.id !== item.id);
+      if (!previouslyEquipped) {
+        return withoutEquippedItem;
       }
-      return {
-        ...current,
-        player: {
-          ...current.player,
-          characterKey: selectedCharacter
-        }
-      };
+      return [...withoutEquippedItem, previouslyEquipped];
     });
-  }, [selectedCharacter]);
 
-  useEffect(() => {
-    if (gameState.screen !== "playing") {
-      return undefined;
-    }
-    frameTimeRef.current = Date.now();
-    const interval = setInterval(() => {
-      const now = Date.now();
-      setClock(now);
-      setGameState((current) =>
-        updateGame(current, {
-          now,
-          deltaMs: now - frameTimeRef.current,
-          input: touchTargetRef.current ?? {}
-        })
-      );
-      frameTimeRef.current = now;
-    }, 33);
-    return () => clearInterval(interval);
-  }, [gameState.screen]);
+    setStatusText(
+      previouslyEquipped
+        ? `${item.name} equipped to ${item.slot}. ${previouslyEquipped.name} returned to inventory.`
+        : `${item.name} equipped to ${item.slot}.`
+    );
+  }
 
-  useEffect(() => {
-    if (!gameState.events.length) {
-      return;
-    }
-    gameState.events.forEach((event) => {
-      if (event.type === "player_hit" || event.type === "boss_spawn" || event.type === "game_over") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
-        return;
-      }
-      if (event.type === "weapon_unlock" || event.type === "powerup" || event.type === "level_up") {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success).catch(() => {});
-        return;
-      }
-      if (event.type === "impact" || event.type === "shield_block" || event.type === "boss_down") {
-        Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      }
-    });
-  }, [gameState.events]);
-
-  const panResponder = useMemo(
-    () =>
-      PanResponder.create({
-        onStartShouldSetPanResponder: () => false,
-        onMoveShouldSetPanResponder: (_, gestureState) =>
-          gameState.screen === "playing" && Math.abs(gestureState.dx) > 3 && Math.abs(gestureState.dx) >= Math.abs(gestureState.dy),
-        onPanResponderMove: (_, gestureState) => {
-          if (gameState.screen !== "playing") {
-            return;
-          }
-          touchTargetRef.current = {
-            target: {
-              x: gestureState.moveX
-            }
-          };
-        }
-      }),
-    [gameState.screen]
-  );
-
-  async function handleSubmitScore() {
-    if (savedScore || isSubmittingScore) {
-      return;
-    }
-    const submission = buildScoreSubmission(gameState);
-    if (submission.name.length !== 3) {
-      setGameState((current) => ({
-        ...current,
-        message: "ENTER 3 CHARS",
-        messageUntil: Date.now() + 1400
-      }));
-      return;
-    }
-    setIsSubmittingScore(true);
-    try {
-      const result = await submitHighScore(submission);
-      setSavedScore(!result.offline);
-      setGameState((current) => ({
-        ...current,
-        message: result.offline ? "OFFLINE: SCORE NOT SYNCED" : "HIGH SCORE SAVED",
-        messageUntil: Date.now() + 1800
-      }));
-    } finally {
-      setIsSubmittingScore(false);
+  function handleInventoryTap(item) {
+    const now = Date.now();
+    const previous = lastTapRef.current[item.id] || 0;
+    lastTapRef.current[item.id] = now;
+    if (now - previous < 300) {
+      equipItem(item);
     }
   }
 
-  async function handleShareScore() {
-    if (!gameState.shareText) {
+  function handleDrop(slot) {
+    if (!draggingItemId) return;
+    const dragged = inventory.find((item) => item.id === draggingItemId);
+    if (!dragged) return;
+    if (dragged.slot !== slot) {
+      setStatusText(`${dragged.name} cannot equip to ${slot}.`);
+      setDraggingItemId(null);
       return;
     }
-    await Share.share({
-      message: gameState.shareText
-    });
+    equipItem(dragged);
+    setDraggingItemId(null);
   }
 
-  function startRun() {
-    setSavedScore(false);
-    setIsSubmittingScore(false);
-    setGameState((current) => startGame(current, Date.now()));
+  function handlePortalContact(nextPosition) {
+    const portal = CORNER_PORTALS.find((candidate) => distance(candidate, nextPosition) <= 70);
+    if (!portal) {
+      return;
+    }
+    const currentIndex = MAP_SEQUENCE.indexOf(currentMap);
+    const nextMap = MAP_SEQUENCE[(currentIndex + 1) % MAP_SEQUENCE.length];
+    setCurrentMap(nextMap);
+    setHeroPos({ x: MAP_WIDTH / 2, y: MAP_HEIGHT / 2 });
+    setStatusText(`${portal.label} activated. Warped from ${currentMap} to ${nextMap}.`);
   }
 
-  const ambientElements = renderAmbient(clock);
-  const weaponBarBottom = Math.max(18, insets.bottom + 18);
-  const playerProfile = PLAYER_CHARACTERS[gameState.player.characterKey];
-  const playerSprite = PLAYER_SPRITES[gameState.player.characterKey];
-  const playerSkillEffect = PLAYER_SKILL_EFFECTS[gameState.player.characterKey];
-  const attackWindowMs = Math.min(280, (WEAPONS[gameState.player.weaponKey]?.fireRateMs ?? 280) + 40);
-  const hurtWindowMs = 320;
-  const walkWindowMs = 140;
-  const deathWindowMs = 640;
-  const attackElapsed = Math.max(0, clock - gameState.lastFireAt);
-  const hurtElapsed = Math.max(0, clock - (gameState.lastPlayerHitAt ?? 0));
-  const walkElapsed = Math.max(0, clock - (gameState.player.lastMoveAt ?? 0));
-  const deathElapsed = Math.max(0, clock - (gameState.playerDeathAt ?? 0));
-  let playerAnimation = "idle";
-  if (gameState.screen === "gameOver") {
-    playerAnimation = "death";
-  } else if (gameState.screen === "playing" && hurtElapsed < hurtWindowMs) {
-    playerAnimation = "hurt";
-  } else if (gameState.screen === "playing" && attackElapsed < attackWindowMs) {
-    playerAnimation = "attack";
-  } else if (gameState.screen === "playing" && walkElapsed < walkWindowMs) {
-    playerAnimation = "walk";
+  function onMovePress(event) {
+    const { locationX, locationY } = event.nativeEvent;
+    const targetX = clamp(camera.left + locationX, 0, MAP_WIDTH);
+    const targetY = clamp(camera.top + locationY, 0, MAP_HEIGHT);
+    const nextPos = { x: targetX, y: targetY };
+    setHeroPos(nextPos);
+    setStatusText(`[${currentMap}] moved to (${Math.round(targetX)}, ${Math.round(targetY)}).`);
+    handlePortalContact(nextPos);
   }
-  const playerAnimationStrip = playerSprite.animations[playerAnimation];
-  const playerFrame =
-    playerAnimation === "attack"
-      ? getProgressFrame(attackElapsed, attackWindowMs, playerAnimationStrip.frameCount)
-      : playerAnimation === "hurt"
-        ? getProgressFrame(hurtElapsed, hurtWindowMs, playerAnimationStrip.frameCount)
-        : playerAnimation === "death"
-          ? getProgressFrame(deathElapsed, deathWindowMs, playerAnimationStrip.frameCount)
-          : getLoopingFrame(clock, playerAnimation === "walk" ? 90 : 140, playerAnimationStrip.frameCount);
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <View style={styles.screen}>
-        <View style={styles.gameSurface} {...panResponder.panHandlers}>
-          <View style={styles.canopyShadow} />
-          <View style={styles.forestGlow} />
-          <View style={styles.groveBloom} />
-          <View style={styles.groundMistA} />
-          <View style={styles.groundMistB} />
-          <View style={styles.backgroundGlowA} />
-          <View style={styles.backgroundGlowB} />
-          {ambientElements.map((element) => (
+      <View style={styles.container}>
+        <Text style={styles.title}>Cathedral of Ash</Text>
+        <Text style={[styles.mapLabel, { color: mapTheme.accent }]}>{currentMap}</Text>
+        <View style={styles.worldFrame}>
+          <Pressable style={styles.worldViewport} onPress={onMovePress}>
             <View
-              key={element.id}
               style={[
-                styles.star,
+                styles.map,
                 {
-                  left: element.drawX,
-                  top: element.drawY,
-                  width: element.size,
-                  height: element.size,
-                  backgroundColor: element.color
+                  width: MAP_WIDTH,
+                  height: MAP_HEIGHT,
+                  left: -camera.left,
+                  top: -camera.top,
+                  backgroundColor: mapTheme.bg
                 }
               ]}
-            />
+            >
+              {Array.from({ length: 300 }).map((_, index) => (
+                <View
+                  key={`tile-${index}`}
+                  style={[
+                    styles.mapTile,
+                    {
+                      left: (index % 20) * 120,
+                      top: Math.floor(index / 20) * 120,
+                      backgroundColor: mapTheme.tile,
+                      borderColor: mapTheme.tileBorder
+                    }
+                  ]}
+                />
+              ))}
+              {CORNER_PORTALS.map((portal) => (
+                <View key={portal.id} style={[styles.portal, { left: portal.x - 26, top: portal.y - 26, borderColor: mapTheme.accent }]}>
+                  <Text style={[styles.portalText, { color: mapTheme.accent }]}>◈</Text>
+                </View>
+              ))}
+              <View style={[styles.hero, { left: heroPos.x - HERO_SIZE / 2, top: heroPos.y - HERO_SIZE / 2 }]}>
+                <Text style={styles.heroText}>⚔</Text>
+              </View>
+            </View>
+          </Pressable>
+        </View>
+
+        <View style={styles.tabBar}>
+          {["Inventory", "Skills", "Stats", "Map", "Options"].map((tab) => (
+            <Pressable key={tab} style={[styles.tabBtn, activeTab === tab && styles.tabBtnActive]} onPress={() => setActiveTab(tab)}>
+              <Text style={styles.tabText}>{tab}</Text>
+            </Pressable>
           ))}
+        </View>
 
-          {gameState.screen !== "menu" && (
-            <>
-              <View style={styles.hud}>
-                <View>
-                  <Text style={styles.hudLabel}>SCORE</Text>
-                  <Text style={styles.hudValue}>{formatScore(gameState.score)}</Text>
-                </View>
-                <View>
-                  <Text style={styles.hudLabel}>LEVEL</Text>
-                  <Text style={styles.hudValue}>{gameState.level}</Text>
-                </View>
-                <View>
-                  <Text style={styles.hudLabel}>HP</Text>
-                  <Text style={styles.hudValue}>{Math.max(gameState.player.hp, 0)}</Text>
-                </View>
-              </View>
+        <View style={styles.inventoryPanel}>
+          <View style={styles.columnLeft}>
+            <Text style={styles.panelTitle}>Equipment</Text>
+            {EQUIP_SLOTS.map((slot) => (
+              <Pressable key={slot} style={styles.equipSlot} onPress={() => handleDrop(slot)}>
+                <Text style={styles.slotLabel}>{slot}</Text>
+                <Text style={styles.slotValue}>{equipment[slot]?.name || "(empty)"}</Text>
+              </Pressable>
+            ))}
+          </View>
 
-              {gameState.message ? <Text style={styles.messageBanner}>{gameState.message}</Text> : null}
+          <View style={styles.columnMiddle}>
+            <Text style={styles.panelTitle}>Hero</Text>
+            <View style={styles.heroPortrait}>
+              <Text style={styles.heroPortraitText}>🛡</Text>
+            </View>
+            <Text style={styles.statusText}>{statusText}</Text>
+          </View>
 
-              {gameState.bullets.map((bullet) => (
-                <View
-                  key={bullet.id}
-                  style={[
-                    styles.projectileSkill,
-                    {
-                      left: bullet.x - playerSkillEffect.size / 2,
-                      top: bullet.y - playerSkillEffect.size / 2,
-                      width: playerSkillEffect.size,
-                      height: playerSkillEffect.size,
-                      transform: [{ rotate: playerSkillEffect.rotation }]
-                    }
-                  ]}
-                >
-                  <SpriteStrip
-                    source={playerSkillEffect.source}
-                    size={playerSkillEffect.size}
-                    frame={Math.floor((clock + bullet.id * 35) / 70) % playerSkillEffect.frameCount}
-                    frameCount={playerSkillEffect.frameCount}
-                  />
-                </View>
-              ))}
-              {gameState.enemyBullets.map((bullet) => (
-                bullet.visualKey ? (
-                  <View
-                    key={bullet.id}
-                    style={[
-                      styles.enemyProjectileSprite,
-                      bullet.visualKey === "bossSlash" && styles.enemyProjectileBossSprite,
-                      {
-                        left: bullet.x - bullet.visualSize / 2,
-                        top: bullet.y - bullet.visualSize / 2,
-                        width: bullet.visualSize,
-                        height: bullet.visualSize,
-                        transform: [{ rotate: bullet.rotationDeg }]
-                      }
-                    ]}
+          <View style={styles.columnRight}>
+            <Text style={styles.panelTitle}>{activeTab}</Text>
+            {activeTab === "Inventory" ? (
+              <ScrollView style={styles.inventoryList}>
+                {inventory.map((item) => (
+                  <Pressable
+                    key={item.id}
+                    style={[styles.inventoryItem, draggingItemId === item.id && styles.inventoryItemDragging]}
+                    onPress={() => handleInventoryTap(item)}
+                    onLongPress={() => {
+                      setDraggingItemId(item.id);
+                      setStatusText(`Dragging ${item.name}. Tap equip slot to drop.`);
+                    }}
                   >
-                    <SpriteStrip
-                      source={ENEMY_PROJECTILE_SPRITES[bullet.visualKey].source}
-                      size={bullet.visualSize}
-                      frame={Math.floor((clock + bullet.id * 40) / 80) % bullet.visualFrameCount}
-                      frameCount={bullet.visualFrameCount}
-                    />
-                  </View>
-                ) : (
-                  <View
-                    key={bullet.id}
-                    style={[
-                      styles.enemyProjectile,
-                      {
-                        left: bullet.x - bullet.radius,
-                        top: bullet.y - bullet.radius,
-                        width: bullet.radius * 2,
-                        height: bullet.radius * 2
-                      }
-                    ]}
-                  />
-                )
-              ))}
-              {gameState.pickups.map((pickup) => (
-                <View
-                  key={pickup.id}
-                  style={[
-                    styles.pickup,
-                    {
-                      left: pickup.x - pickup.size,
-                      top: pickup.y - pickup.size,
-                      width: pickup.size * 2,
-                      height: pickup.size * 2,
-                      borderColor:
-                        pickup.kind === "portal" ? WEAPONS[pickup.weaponKey].color : POWER_UPS[pickup.powerKey].color
-                    }
-                  ]}
-                >
-                  <Text style={styles.pickupText}>{pickup.kind === "portal" ? "P" : pickup.powerKey[0].toUpperCase()}</Text>
-                </View>
-              ))}
-              {gameState.enemies.map((enemy) => {
-                const sprite = ENEMY_SPRITES[enemy.type];
-                const hurtElapsedEnemy = Math.max(0, clock - (enemy.lastHitAt ?? 0));
-                const attackElapsedEnemy = Math.max(0, clock - (enemy.lastAttackAt ?? 0));
-                const enemyAnimation =
-                  hurtElapsedEnemy < 280 ? "hurt" : attackElapsedEnemy < 320 ? "attack" : "walk";
-                const strip = sprite.animations[enemyAnimation];
-                const frame =
-                  enemyAnimation === "hurt"
-                    ? getProgressFrame(hurtElapsedEnemy, 280, strip.frameCount)
-                    : enemyAnimation === "attack"
-                      ? getProgressFrame(attackElapsedEnemy, 320, strip.frameCount)
-                      : getLoopingFrame(clock, 120, strip.frameCount, enemy.id * 80);
-                return (
-                  <View
-                    key={enemy.id}
-                    style={[
-                      styles.enemySpriteWrap,
-                      enemy.type === "boss" && styles.enemyBossWrap,
-                      {
-                        left: enemy.x - sprite.size / 2,
-                        top: enemy.y - sprite.size / 2,
-                        width: sprite.size,
-                        height: sprite.size
-                      }
-                    ]}
-                  >
-                    <SpriteStrip source={strip.source} size={sprite.size} frame={frame} frameCount={strip.frameCount} />
-                  </View>
-                );
-              })}
-              {gameState.defeatedEnemies.map((enemy) => {
-                const sprite = ENEMY_SPRITES[enemy.type];
-                const strip = sprite.animations.death;
-                const frame = getProgressFrame(clock - enemy.defeatedAt, 520, strip.frameCount);
-                return (
-                  <View
-                    key={`defeated-${enemy.id}-${enemy.defeatedAt}`}
-                    style={[
-                      styles.enemySpriteWrap,
-                      enemy.type === "boss" && styles.enemyBossWrap,
-                      {
-                        left: enemy.x - sprite.size / 2,
-                        top: enemy.y - sprite.size / 2,
-                        width: sprite.size,
-                        height: sprite.size
-                      }
-                    ]}
-                  >
-                    <SpriteStrip source={strip.source} size={sprite.size} frame={frame} frameCount={strip.frameCount} />
-                  </View>
-                );
-              })}
-              {gameState.player.shieldUntil > Date.now() && (
-                <View
-                  style={[
-                    styles.playerShieldAura,
-                    {
-                      left: gameState.player.x - playerSprite.size * 0.55,
-                      top: gameState.player.y - playerSprite.size * 0.55,
-                      width: playerSprite.size * 1.1,
-                      height: playerSprite.size * 1.1
-                    }
-                  ]}
-                />
-              )}
-              <View
-                style={[
-                  styles.playerSpriteWrap,
-                  {
-                    left: gameState.player.x - playerSprite.size / 2,
-                    top: gameState.player.y - playerSprite.size / 2,
-                    width: playerSprite.size,
-                    height: playerSprite.size
-                  }
-                ]}
-              >
-                <SpriteStrip
-                  source={playerAnimationStrip.source}
-                  size={playerSprite.size}
-                  frame={playerFrame}
-                  frameCount={playerAnimationStrip.frameCount}
-                />
-              </View>
-              <View style={[styles.weaponBar, { bottom: weaponBarBottom }]}>
-                {gameState.availableWeapons.map((weaponKey) => (
-                  <NeonButton
-                    key={weaponKey}
-                    compact
-                    label={weaponKey.slice(0, 3).toUpperCase()}
-                    variant={gameState.player.weaponKey === weaponKey ? "magenta" : "cyan"}
-                    onPress={() => setGameState((current) => cycleWeapon(current, weaponKey))}
-                  />
+                    <Text style={styles.itemName}>{item.name}</Text>
+                    <Text style={styles.itemMeta}>
+                      {item.slot} • {item.rarity}
+                    </Text>
+                  </Pressable>
                 ))}
-                {gameState.screen === "playing" && (
-                  <NeonButton compact label="II" variant="gold" onPress={() => setGameState((current) => pauseGame(current))} />
-                )}
+              </ScrollView>
+            ) : (
+              <View style={styles.placeholderPane}>
+                <Text style={styles.placeholderText}>Gothic {activeTab} panel ready.</Text>
               </View>
-            </>
-          )}
-
-          {gameState.screen === "menu" && (
-            <Overlay>
-              <Text style={styles.overlayTitle}>READY</Text>
-              <View style={styles.readyHeroPreview}>
-                <SpriteStrip
-                  source={playerSprite.animations.idle.source}
-                  size={playerSprite.previewSize}
-                  frame={0}
-                  frameCount={playerSprite.animations.idle.frameCount}
-                />
-              </View>
-              <Text style={styles.readyHeroName}>{playerProfile.name}</Text>
-              <Text style={styles.overlayBody}>
-                {playerProfile.name} is locked in. Slide left and right, auto-fire never stops, and every 5th level drops a
-                Greatsword Skeleton mini-boss.
-              </Text>
-              <View style={styles.buttonRow}>
-                <NeonButton label="LAUNCH" onPress={startRun} />
-                <NeonButton label="MENU" variant="magenta" onPress={() => router.replace("/")} />
-              </View>
-            </Overlay>
-          )}
-
-          {gameState.screen === "paused" && (
-            <Overlay>
-              <Text style={styles.overlayTitle}>PAUSED</Text>
-              <Text style={styles.overlayBody}>Combat is frozen. Resume the run or quit back to the main menu.</Text>
-              <View style={styles.buttonRow}>
-                <NeonButton label="RESUME" onPress={() => setGameState((current) => resumeGame(current, Date.now()))} />
-                <NeonButton label="QUIT" variant="magenta" onPress={() => router.replace("/")} />
-              </View>
-            </Overlay>
-          )}
-
-          {gameState.screen === "gameOver" && (
-            <Overlay>
-              <Text style={styles.overlayTitle}>GAME OVER</Text>
-              <Text style={styles.overlayBody}>
-                Score {formatScore(gameState.score)} // Level {gameState.level} // Kills {gameState.kills}
-              </Text>
-              <Text style={styles.overlayCaption}>Enter your 3-character pilot tag</Text>
-              <Text style={styles.nameEntry}>{gameState.nameEntry.padEnd(3, "_")}</Text>
-              <NamePad
-                onPress={(key) => {
-                  setGameState((current) => appendNameCharacter(current, key));
-                }}
-              />
-              <View style={styles.buttonRow}>
-                <NeonButton label="DEL" variant="magenta" onPress={() => setGameState((current) => deleteNameCharacter(current))} />
-                <NeonButton
-                  label={savedScore ? "SAVED" : isSubmittingScore ? "SAVING" : "ENTER"}
-                  variant="gold"
-                  disabled={savedScore || isSubmittingScore || gameState.nameEntry.length !== 3}
-                  onPress={handleSubmitScore}
-                />
-              </View>
-              <View style={styles.buttonRow}>
-                <NeonButton label="SHARE" variant="gold" onPress={handleShareScore} />
-                <NeonButton label="MENU" variant="magenta" onPress={() => router.replace("/")} />
-              </View>
-            </Overlay>
-          )}
+            )}
+          </View>
         </View>
       </View>
     </SafeAreaView>
   );
 }
 
-function NamePad({ onPress }) {
-  return (
-    <View style={styles.namePad}>
-      {[NAME_KEYS, NAME_KEYS_2, NAME_KEYS_3].map((row, index) => (
-        <View key={`row-${index}`} style={styles.namePadRow}>
-          {row.map((key) => (
-            <NeonButton key={key} compact label={key} variant="cyan" onPress={() => onPress(key)} />
-          ))}
-        </View>
-      ))}
-    </View>
-  );
-}
-
 const styles = StyleSheet.create({
-  safeArea: {
+  safeArea: { flex: 1, backgroundColor: "#0f0a0a" },
+  container: { flex: 1, padding: 10 },
+  title: { color: "#d2b48c", fontSize: 28, textAlign: "center", marginBottom: 4, fontWeight: "700" },
+  mapLabel: { fontSize: 14, textAlign: "center", marginBottom: 6, letterSpacing: 1.2, fontWeight: "700" },
+  worldFrame: { borderWidth: 2, borderColor: "#3d2a2a", borderRadius: 10, overflow: "hidden", alignSelf: "center" },
+  worldViewport: { width: VIEW_WIDTH, height: VIEW_HEIGHT, backgroundColor: "#1c1212" },
+  map: { position: "absolute" },
+  mapTile: { position: "absolute", width: 110, height: 110, borderWidth: 1 },
+  portal: { position: "absolute", width: 52, height: 52, borderRadius: 26, borderWidth: 2, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(20,20,20,0.45)" },
+  portalText: { fontSize: 24, fontWeight: "700" },
+  hero: {
+    position: "absolute",
+    width: HERO_SIZE,
+    height: HERO_SIZE,
+    borderRadius: 8,
+    backgroundColor: "#4f1e1e",
+    justifyContent: "center",
+    alignItems: "center",
+    borderWidth: 1,
+    borderColor: "#d2b48c"
+  },
+  heroText: { color: "#f6e7c6", fontSize: 22 },
+  tabBar: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10, justifyContent: "center" },
+  tabBtn: { paddingHorizontal: 10, paddingVertical: 7, borderRadius: 8, borderWidth: 1, borderColor: "#3b2c2c", backgroundColor: "#170f0f" },
+  tabBtnActive: { backgroundColor: "#3b2424", borderColor: "#b08d57" },
+  tabText: { color: "#e8d9bd", fontSize: 12 },
+  inventoryPanel: { flex: 1, flexDirection: "row", marginTop: 10, gap: 8 },
+  columnLeft: { flex: 1.15, backgroundColor: "#150e0e", borderRadius: 10, padding: 8, borderWidth: 1, borderColor: "#382727" },
+  columnMiddle: {
     flex: 1,
-    backgroundColor: COLORS.background
-  },
-  screen: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: COLORS.background
-  },
-  gameSurface: {
-    width: GAME_WIDTH,
-    height: GAME_HEIGHT,
-    overflow: "hidden",
-    backgroundColor: "#151912",
+    backgroundColor: "#120b0b",
+    borderRadius: 10,
+    padding: 8,
     borderWidth: 1,
-    borderColor: "rgba(143, 169, 122, 0.28)",
-    borderRadius: 28
+    borderColor: "#382727",
+    alignItems: "center"
   },
-  backgroundGlowA: {
-    position: "absolute",
-    width: 320,
-    height: 220,
-    borderRadius: 220,
-    top: -40,
-    left: -40,
-    backgroundColor: "rgba(166, 178, 140, 0.08)"
-  },
-  backgroundGlowB: {
-    position: "absolute",
-    width: 290,
-    height: 240,
-    borderRadius: 240,
-    right: -50,
-    bottom: 70,
-    backgroundColor: "rgba(127, 102, 116, 0.08)"
-  },
-  canopyShadow: {
-    position: "absolute",
-    top: -120,
-    left: -50,
-    right: -50,
-    height: 230,
-    borderBottomLeftRadius: 180,
-    borderBottomRightRadius: 180,
-    backgroundColor: "rgba(31, 40, 27, 0.22)"
-  },
-  forestGlow: {
-    position: "absolute",
-    width: 420,
-    height: 220,
-    borderRadius: 220,
-    left: -30,
-    top: 110,
-    backgroundColor: "rgba(127, 144, 110, 0.09)"
-  },
-  groveBloom: {
-    position: "absolute",
-    width: 260,
-    height: 180,
-    borderRadius: 180,
-    right: 20,
-    top: 210,
-    backgroundColor: "rgba(142, 114, 126, 0.08)"
-  },
-  groundMistA: {
-    position: "absolute",
-    left: -40,
-    right: -20,
-    bottom: 80,
-    height: 140,
-    borderRadius: 120,
-    backgroundColor: "rgba(189, 197, 173, 0.08)"
-  },
-  groundMistB: {
-    position: "absolute",
-    left: 20,
-    right: 10,
-    bottom: 10,
-    height: 120,
-    borderRadius: 120,
-    backgroundColor: "rgba(120, 135, 106, 0.1)"
-  },
-  star: {
-    position: "absolute",
-    borderRadius: 4
-  },
-  hud: {
-    position: "absolute",
-    top: 16,
-    left: 18,
-    right: 18,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    zIndex: 5
-  },
-  hudLabel: {
-    color: "#aea18d",
-    fontSize: 11,
-    fontFamily: MONO_FONT,
-    letterSpacing: 1.1
-  },
-  hudValue: {
-    color: COLORS.text,
-    fontSize: 20,
-    fontFamily: MONO_FONT,
-    fontWeight: "800"
-  },
-  messageBanner: {
-    position: "absolute",
-    top: 84,
-    alignSelf: "center",
-    color: COLORS.text,
-    fontFamily: MONO_FONT,
-    letterSpacing: 1.2,
-    textAlign: "center",
-    backgroundColor: "rgba(31, 27, 21, 0.82)",
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12
-  },
-  player: {
-    position: "absolute",
-    width: 48,
-    height: 48,
-    borderWidth: 2,
-    borderColor: COLORS.cyan,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    transform: [{ rotate: "45deg" }],
-    shadowColor: COLORS.cyan,
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 0 },
-    backgroundColor: "rgba(38, 32, 25, 0.88)"
-  },
-  playerShielded: {
-    borderColor: COLORS.gold,
-    shadowColor: COLORS.gold
-  },
-  playerCore: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: COLORS.magenta
-  },
-  enemy: {
-    position: "absolute",
-    borderWidth: 2,
-    borderRadius: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(33, 28, 22, 0.92)"
-  },
-  enemyCore: {
-    width: 10,
-    height: 10,
-    borderRadius: 5
-  },
-  playerSpriteWrap: {
-    position: "absolute",
-    zIndex: 2,
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  playerShieldAura: {
-    position: "absolute",
-    borderRadius: 999,
-    borderWidth: 2,
-    borderColor: "rgba(199, 165, 106, 0.88)",
-    shadowColor: COLORS.gold,
-    shadowOpacity: 0.4,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 0 }
-  },
-  enemySpriteWrap: {
-    position: "absolute",
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  enemyBossWrap: {
-    shadowColor: COLORS.gold,
-    shadowOpacity: 0.4,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 0 }
-  },
-  projectileSkill: {
-    position: "absolute",
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  enemyProjectile: {
-    position: "absolute",
-    borderRadius: 999,
-    backgroundColor: COLORS.gold
-  },
-  enemyProjectileSprite: {
-    position: "absolute",
-    alignItems: "center",
-    justifyContent: "center"
-  },
-  enemyProjectileBossSprite: {
-    shadowColor: COLORS.gold,
-    shadowOpacity: 0.7,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 0 }
-  },
-  pickup: {
-    position: "absolute",
-    borderWidth: 2,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(30, 25, 19, 0.88)"
-  },
-  pickupText: {
-    color: COLORS.text,
-    fontFamily: MONO_FONT,
-    fontWeight: "900",
-    fontSize: 11
-  },
-  weaponBar: {
-    position: "absolute",
-    left: 12,
-    right: 12,
-    bottom: 18,
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 8
-  },
-  overlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(11, 9, 6, 0.7)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 20
-  },
-  overlayCard: {
-    width: "100%",
-    maxWidth: 340,
-    borderRadius: 24,
+  columnRight: { flex: 1.2, backgroundColor: "#150e0e", borderRadius: 10, padding: 8, borderWidth: 1, borderColor: "#382727" },
+  panelTitle: { color: "#cab28b", fontWeight: "700", marginBottom: 8, textAlign: "center" },
+  equipSlot: { borderWidth: 1, borderColor: "#493535", borderRadius: 8, padding: 6, marginBottom: 6, backgroundColor: "#211414" },
+  slotLabel: { color: "#a28762", fontSize: 12 },
+  slotValue: { color: "#efdfc3", fontSize: 12 },
+  heroPortrait: {
+    width: 100,
+    height: 130,
     borderWidth: 1,
-    borderColor: "rgba(143, 169, 122, 0.34)",
-    backgroundColor: "rgba(27, 24, 18, 0.96)",
-    padding: 18,
-    gap: 14
-  },
-  overlayTitle: {
-    color: COLORS.text,
-    fontFamily: MONO_FONT,
-    fontSize: 24,
-    fontWeight: "900",
-    textAlign: "center"
-  },
-  overlayBody: {
-    color: "#d8ccb8",
-    textAlign: "center",
-    lineHeight: 20
-  },
-  overlayCaption: {
-    color: "#a5967f",
-    textAlign: "center"
-  },
-  readyHeroPreview: {
-    alignSelf: "center",
-    width: 108,
-    height: 108,
-    borderRadius: 30,
-    borderWidth: 1,
-    borderColor: "rgba(199, 165, 106, 0.34)",
-    backgroundColor: "rgba(34, 29, 22, 0.95)",
+    borderColor: "#92734a",
+    borderRadius: 12,
+    backgroundColor: "#241717",
+    justifyContent: "center",
     alignItems: "center",
-    justifyContent: "center"
+    marginBottom: 10
   },
-  readyHeroName: {
-    color: COLORS.gold,
-    fontFamily: MONO_FONT,
-    fontSize: 18,
-    fontWeight: "800",
-    textAlign: "center"
-  },
-  buttonRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 10,
-    flexWrap: "wrap"
-  },
-  nameEntry: {
-    color: COLORS.gold,
-    fontFamily: MONO_FONT,
-    fontSize: 32,
-    fontWeight: "900",
-    textAlign: "center",
-    letterSpacing: 12,
-    marginLeft: 12
-  },
-  namePad: {
-    gap: 8
-  },
-  namePadRow: {
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 6,
-    flexWrap: "wrap"
-  }
+  heroPortraitText: { fontSize: 40, color: "#e9d9bc" },
+  statusText: { color: "#cbb89b", fontSize: 12, textAlign: "center" },
+  inventoryList: { flex: 1 },
+  inventoryItem: { borderWidth: 1, borderColor: "#4a3636", borderRadius: 8, padding: 8, marginBottom: 6, backgroundColor: "#221515" },
+  inventoryItemDragging: { borderColor: "#d0b176", backgroundColor: "#392424" },
+  itemName: { color: "#f4e7cb", fontSize: 13, fontWeight: "600" },
+  itemMeta: { color: "#bc9d73", fontSize: 11, marginTop: 2 },
+  placeholderPane: { flex: 1, justifyContent: "center", alignItems: "center" },
+  placeholderText: { color: "#bca27e" }
 });
