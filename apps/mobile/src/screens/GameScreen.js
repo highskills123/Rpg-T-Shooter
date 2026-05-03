@@ -11,24 +11,9 @@ const EQUIP_SLOTS = ["Head", "Chest", "Hands", "Legs", "Weapon", "Ring"];
 const MAP_SEQUENCE = ["City", "Plains", "Forest"];
 
 const MAP_THEMES = {
-  City: {
-    bg: "#241b1b",
-    tile: "#3a2f2f",
-    tileBorder: "#5a4848",
-    accent: "#d3b27d"
-  },
-  Plains: {
-    bg: "#1a2316",
-    tile: "#27351f",
-    tileBorder: "#3b522d",
-    accent: "#c4c78a"
-  },
-  Forest: {
-    bg: "#111f18",
-    tile: "#1d3227",
-    tileBorder: "#31523f",
-    accent: "#9bc08d"
-  }
+  City: { bg: "#241b1b", tile: "#3a2f2f", tileBorder: "#5a4848", accent: "#d3b27d" },
+  Plains: { bg: "#1a2316", tile: "#27351f", tileBorder: "#3b522d", accent: "#c4c78a" },
+  Forest: { bg: "#111f18", tile: "#1d3227", tileBorder: "#31523f", accent: "#9bc08d" }
 };
 
 const START_ITEMS = [
@@ -55,8 +40,6 @@ function distance(a, b) {
   const dx = a.x - b.x;
   const dy = a.y - b.y;
   return Math.sqrt(dx * dx + dy * dy);
-function clamp(v, min, max) {
-  return Math.max(min, Math.min(max, v));
 }
 
 export default function GameScreen() {
@@ -67,7 +50,6 @@ export default function GameScreen() {
   const [draggingItemId, setDraggingItemId] = useState(null);
   const [statusText, setStatusText] = useState("Tap the world to move. Enter a corner portal to change map.");
   const [currentMap, setCurrentMap] = useState("City");
-  const [statusText, setStatusText] = useState("Tap the world to move.");
   const lastTapRef = useRef({});
 
   const camera = useMemo(() => {
@@ -79,9 +61,16 @@ export default function GameScreen() {
   const mapTheme = MAP_THEMES[currentMap];
 
   function equipItem(item) {
+    const replacedItem = equipment[item.slot];
+
     setEquipment((current) => ({ ...current, [item.slot]: item }));
-    setInventory((items) => items.filter((i) => i.id !== item.id));
-    setStatusText(`${item.name} equipped to ${item.slot}.`);
+    setInventory((items) => {
+      const withoutEquipped = items.filter((i) => i.id !== item.id);
+      return replacedItem ? [...withoutEquipped, replacedItem] : withoutEquipped;
+    });
+
+    const swapText = replacedItem ? ` Swapped out ${replacedItem.name} to inventory.` : "";
+    setStatusText(`${item.name} equipped to ${item.slot}.${swapText}`);
   }
 
   function handleInventoryTap(item) {
@@ -108,9 +97,8 @@ export default function GameScreen() {
 
   function handlePortalContact(nextPosition) {
     const portal = CORNER_PORTALS.find((candidate) => distance(candidate, nextPosition) <= 70);
-    if (!portal) {
-      return;
-    }
+    if (!portal) return;
+
     const currentIndex = MAP_SEQUENCE.indexOf(currentMap);
     const nextMap = MAP_SEQUENCE[(currentIndex + 1) % MAP_SEQUENCE.length];
     setCurrentMap(nextMap);
@@ -128,19 +116,12 @@ export default function GameScreen() {
     handlePortalContact(nextPos);
   }
 
-  function onMovePress(event) {
-    const { locationX, locationY } = event.nativeEvent;
-    const targetX = clamp(camera.left + locationX, 0, MAP_WIDTH);
-    const targetY = clamp(camera.top + locationY, 0, MAP_HEIGHT);
-    setHeroPos({ x: targetX, y: targetY });
-    setStatusText(`Moved to (${Math.round(targetX)}, ${Math.round(targetY)}).`);
-  }
-
   return (
     <SafeAreaView style={styles.safeArea}>
       <View style={styles.container}>
         <Text style={styles.title}>Cathedral of Ash</Text>
         <Text style={[styles.mapLabel, { color: mapTheme.accent }]}>{currentMap}</Text>
+
         <View style={styles.worldFrame}>
           <Pressable style={styles.worldViewport} onPress={onMovePress}>
             <View
@@ -155,9 +136,6 @@ export default function GameScreen() {
                 }
               ]}
             >
-        <View style={styles.worldFrame}>
-          <Pressable style={styles.worldViewport} onPress={onMovePress}>
-            <View style={[styles.map, { width: MAP_WIDTH, height: MAP_HEIGHT, left: -camera.left, top: -camera.top }]}>
               {Array.from({ length: 300 }).map((_, index) => (
                 <View
                   key={`tile-${index}`}
@@ -172,42 +150,19 @@ export default function GameScreen() {
                   ]}
                 />
               ))}
+
               {CORNER_PORTALS.map((portal) => (
                 <View key={portal.id} style={[styles.portal, { left: portal.x - 26, top: portal.y - 26, borderColor: mapTheme.accent }]}>
                   <Text style={[styles.portalText, { color: mapTheme.accent }]}>◈</Text>
                 </View>
               ))}
-                      top: Math.floor(index / 20) * 120
-                    }
-                  ]}
-                />
-              ))}
+
               <View style={[styles.hero, { left: heroPos.x - HERO_SIZE / 2, top: heroPos.y - HERO_SIZE / 2 }]}>
                 <Text style={styles.heroText}>⚔</Text>
               </View>
             </View>
           </Pressable>
         </View>
-
-        <View style={styles.tabBar}>
-          {["Inventory", "Skills", "Stats", "Map", "Options"].map((tab) => (
-            <Pressable key={tab} style={[styles.tabBtn, activeTab === tab && styles.tabBtnActive]} onPress={() => setActiveTab(tab)}>
-              <Text style={styles.tabText}>{tab}</Text>
-            </Pressable>
-          ))}
-        </View>
-
-        <View style={styles.inventoryPanel}>
-          <View style={styles.columnLeft}>
-            <Text style={styles.panelTitle}>Equipment</Text>
-            {EQUIP_SLOTS.map((slot) => (
-              <Pressable key={slot} style={styles.equipSlot} onPress={() => handleDrop(slot)}>
-                <Text style={styles.slotLabel}>{slot}</Text>
-                <Text style={styles.slotValue}>{equipment[slot]?.name || "(empty)"}</Text>
-              </Pressable>
-            ))}
-          </View>
-
 
         <View style={styles.tabBar}>
           {["Inventory", "Skills", "Stats", "Map", "Options"].map((tab) => (
@@ -254,7 +209,6 @@ export default function GameScreen() {
                     <Text style={styles.itemMeta}>
                       {item.slot} • {item.rarity}
                     </Text>
-                    <Text style={styles.itemMeta}>{item.slot} • {item.rarity}</Text>
                   </Pressable>
                 ))}
               </ScrollView>
@@ -281,22 +235,6 @@ const styles = StyleSheet.create({
   mapTile: { position: "absolute", width: 110, height: 110, borderWidth: 1 },
   portal: { position: "absolute", width: 52, height: 52, borderRadius: 26, borderWidth: 2, justifyContent: "center", alignItems: "center", backgroundColor: "rgba(20,20,20,0.45)" },
   portalText: { fontSize: 24, fontWeight: "700" },
-  hero: {
-    position: "absolute",
-    width: HERO_SIZE,
-    height: HERO_SIZE,
-    borderRadius: 8,
-    backgroundColor: "#4f1e1e",
-    justifyContent: "center",
-    alignItems: "center",
-    borderWidth: 1,
-    borderColor: "#d2b48c"
-  },
-  title: { color: "#d2b48c", fontSize: 28, textAlign: "center", marginBottom: 8, fontWeight: "700" },
-  worldFrame: { borderWidth: 2, borderColor: "#3d2a2a", borderRadius: 10, overflow: "hidden", alignSelf: "center" },
-  worldViewport: { width: VIEW_WIDTH, height: VIEW_HEIGHT, backgroundColor: "#1c1212" },
-  map: { position: "absolute", backgroundColor: "#1a1010" },
-  mapTile: { position: "absolute", width: 110, height: 110, borderWidth: 1, borderColor: "#2f1f1f", backgroundColor: "#221515" },
   hero: { position: "absolute", width: HERO_SIZE, height: HERO_SIZE, borderRadius: 8, backgroundColor: "#4f1e1e", justifyContent: "center", alignItems: "center", borderWidth: 1, borderColor: "#d2b48c" },
   heroText: { color: "#f6e7c6", fontSize: 22 },
   tabBar: { flexDirection: "row", flexWrap: "wrap", gap: 6, marginTop: 10, justifyContent: "center" },
@@ -305,32 +243,12 @@ const styles = StyleSheet.create({
   tabText: { color: "#e8d9bd", fontSize: 12 },
   inventoryPanel: { flex: 1, flexDirection: "row", marginTop: 10, gap: 8 },
   columnLeft: { flex: 1.15, backgroundColor: "#150e0e", borderRadius: 10, padding: 8, borderWidth: 1, borderColor: "#382727" },
-  columnMiddle: {
-    flex: 1,
-    backgroundColor: "#120b0b",
-    borderRadius: 10,
-    padding: 8,
-    borderWidth: 1,
-    borderColor: "#382727",
-    alignItems: "center"
-  },
   columnMiddle: { flex: 1, backgroundColor: "#120b0b", borderRadius: 10, padding: 8, borderWidth: 1, borderColor: "#382727", alignItems: "center" },
   columnRight: { flex: 1.2, backgroundColor: "#150e0e", borderRadius: 10, padding: 8, borderWidth: 1, borderColor: "#382727" },
   panelTitle: { color: "#cab28b", fontWeight: "700", marginBottom: 8, textAlign: "center" },
   equipSlot: { borderWidth: 1, borderColor: "#493535", borderRadius: 8, padding: 6, marginBottom: 6, backgroundColor: "#211414" },
   slotLabel: { color: "#a28762", fontSize: 12 },
   slotValue: { color: "#efdfc3", fontSize: 12 },
-  heroPortrait: {
-    width: 100,
-    height: 130,
-    borderWidth: 1,
-    borderColor: "#92734a",
-    borderRadius: 12,
-    backgroundColor: "#241717",
-    justifyContent: "center",
-    alignItems: "center",
-    marginBottom: 10
-  },
   heroPortrait: { width: 100, height: 130, borderWidth: 1, borderColor: "#92734a", borderRadius: 12, backgroundColor: "#241717", justifyContent: "center", alignItems: "center", marginBottom: 10 },
   heroPortraitText: { fontSize: 40, color: "#e9d9bc" },
   statusText: { color: "#cbb89b", fontSize: 12, textAlign: "center" },
